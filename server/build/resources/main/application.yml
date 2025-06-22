@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+filesystem:
+  root-path: ./file-storage
+  allowed-extensions: txt,md,json,log
+
+spring:
+  application:
+    name: file-manager
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
