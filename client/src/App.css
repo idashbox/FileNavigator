@@ -1,0 +1,87 @@
+.file-explorer {
+  font-family: Arial, sans-serif;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.up-button {
+  padding: 5px 10px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.up-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 15px;
+  border-bottom: 1px solid #f5f5f5;
+  cursor: pointer;
+}
+
+.file-item:hover {
+  background-color: #f9f9f9;
+}
+
+.file-item.directory {
+  font-weight: bold;
+}
+
+.icon {
+  margin-right: 10px;
+  font-size: 1.2em;
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.size, .modified {
+  margin-left: 15px;
+  color: #666;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 20px;
+  text-align: center;
+  color: #888;
+}
+
+.loading {
+  padding: 20px;
+  text-align: center;
+}
+
+.error {
+  padding: 20px;
+  color: #d32f2f;
+  background-color: #ffebee;
+  border-radius: 4px;
+}
