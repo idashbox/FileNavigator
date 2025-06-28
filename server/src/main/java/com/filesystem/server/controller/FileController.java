@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 @RestController
@@ -23,5 +25,21 @@ public class FileController {
     public List<FileInfo> listFiles(@RequestParam(required = false) String path) throws IOException {
         System.out.println("Received path parameter: '" + path + "'");
         return fileService.listFiles(path != null ? path : "");
+    }
+    @GetMapping("/content")
+    public String getFileContent(@RequestParam String path) throws IOException {
+        System.out.println("Requested file path: '" + path + "'");
+        Path filePath = fileService.resolveFilePath(path);
+
+        System.out.println("Resolved file path: '" + filePath + "'");
+        if (!Files.exists(filePath)) {
+            throw new IOException("Файл не найден: " + filePath);
+        }
+
+        if (Files.isDirectory(filePath)) {
+            throw new IOException("Указанный путь является директорией: " + filePath);
+        }
+
+        return new String(Files.readAllBytes(filePath));
     }
 }

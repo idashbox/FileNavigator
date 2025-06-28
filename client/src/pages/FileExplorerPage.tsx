@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getFiles, FileItem } from '../api/fileApi';
+import FileList from '../components/FileList';
+import FileModal from '../components/FileModal';
 
 const FileExplorerPage: React.FC = () => {
     const [files, setFiles] = useState<FileItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+    const [viewType, setViewType] = useState<'list' | 'table'>('table');
+
     const { '*': pathParam } = useParams();
     const navigate = useNavigate();
 
@@ -15,17 +20,16 @@ const FileExplorerPage: React.FC = () => {
             .replace(/\.\./g, '')
         : '';
 
+    const breadcrumbs = currentPath ? currentPath.split('/') : [];
+
     useEffect(() => {
         const fetchFiles = async () => {
             try {
                 setLoading(true);
                 setError(null);
-                console.log('Fetching files for path:', currentPath);
                 const data = await getFiles(currentPath);
-                console.log('Received files:', data);
                 setFiles(data);
             } catch (err) {
-                console.error('Full error:', err);
                 const message = err instanceof Error ? err.message : 'Unknown error';
                 setError(`Failed to load files: ${message}`);
             } finally {
@@ -38,21 +42,24 @@ const FileExplorerPage: React.FC = () => {
 
     const handleItemClick = (file: FileItem) => {
         if (file.type === 'directory') {
-            // Формируем путь с учётом текущей позиции
             const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-            console.log('Navigating to:', newPath);
             navigate(`/files/${newPath}`);
+        } else {
+            setSelectedFile(file);
         }
     };
 
     const handleGoUp = () => {
         if (!currentPath) return;
-
-        const pathSegments = currentPath.split('/');
-        pathSegments.pop();
-        const parentPath = pathSegments.join('/');
-        console.log('Going up to:', parentPath);
+        const segments = currentPath.split('/');
+        segments.pop();
+        const parentPath = segments.join('/');
         navigate(parentPath ? `/files/${parentPath}` : '/');
+    };
+
+    const handleBreadcrumbClick = (index: number) => {
+        const newPath = breadcrumbs.slice(0, index + 1).join('/');
+        navigate(`/files/${newPath}`);
     };
 
     if (loading) return <div className="loading">Loading files...</div>;
@@ -77,28 +84,28 @@ const FileExplorerPage: React.FC = () => {
                 <h2>Current Path: /{currentPath || 'Root'}</h2>
             </div>
 
-            <ul className="file-list">
-                {files.length === 0 ? (
-                    <li className="empty">No files found</li>
-                ) : (
-                    files.map((file) => (
-                        <li
-                            key={`${file.type}-${file.name}`}
-                            className={`file-item ${file.type}`}
-                            onClick={() => handleItemClick(file)}
-                        >
-                            <span className="icon">
-                                {file.type === 'directory' ? '📁' : '📄'}
-                            </span>
-                            <span className="name">{file.name}</span>
-                            <span className="size">{file.size} bytes</span>
-                            <span className="modified">
-                                {new Date(file.modified).toLocaleString()}
-                            </span>
-                        </li>
-                    ))
-                )}
-            </ul>
+            <div className="breadcrumbs">
+                <span onClick={() => navigate('/')}>Root</span>
+                {breadcrumbs.map((segment, index) => (
+                    <span key={index} onClick={() => handleBreadcrumbClick(index)}>
+                        {' / '}{segment}
+                    </span>
+                ))}
+            </div>
+
+            <div className="view-toggle">
+                <button onClick={() => setViewType(viewType === 'table' ? 'list' : 'table')}>
+                    Переключить на {viewType === 'table' ? 'список' : 'таблицу'}
+                </button>
+            </div>
+
+            <FileList files={files} onClick={handleItemClick} view={viewType} />
+
+            <FileModal
+                file={selectedFile}
+                onClose={() => setSelectedFile(null)}
+                path={currentPath}
+            />
         </div>
     );
 };

@@ -18,14 +18,13 @@ const apiClient = axios.create({
 
 export const getFiles = async (path: string): Promise<FileItem[]> => {
     try {
-        // Sanitize path: remove leading/trailing slashes and prevent '..' traversal
         const sanitizedPath = path
-            .replace(/^\/+|\/+$/g, '') // Remove leading/trailing slashes
-            .replace(/\.\./g, '');     // Prevent directory traversal
+            .replace(/^\/+|\/+$/g, '')
+            .replace(/\.\./g, '');
         console.log('Sending path to backend:', sanitizedPath);
         const response = await apiClient.get<FileItem[]>('/api/files', {
             params: {
-                path: sanitizedPath || '' // Send empty string for root
+                path: sanitizedPath || ''
             },
         });
         return response.data;
@@ -38,4 +37,9 @@ export const getFiles = async (path: string): Promise<FileItem[]> => {
         console.error('Unexpected error:', error);
         throw new Error('An unexpected error occurred');
     }
+};
+
+export const getFileContent = async (path: string): Promise<string | null> => {
+    const response = await apiClient.get('/api/files/content', { params: { path } });
+    return response.data;
 };
