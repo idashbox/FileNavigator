@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,7 +44,7 @@ class FileServiceTests {
     }
 
     @Test
-    void listFiles_outsideRoot_shouldThrowSecurityException() {
+    void listFiles_outsideRoot_shouldThrowSecurityException() throws IOException {
         String outsidePath = fileService.resolveFilePath("").getParent().resolve("outside").toString();
         assertThrows(SecurityException.class, () -> {
             fileService.listFiles(outsidePath);
