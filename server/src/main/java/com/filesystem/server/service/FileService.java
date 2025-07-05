@@ -5,14 +5,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class FileService {
@@ -104,4 +107,39 @@ public class FileService {
         }
     }
 
+    public void delete(String relativePath) throws IOException {
+        Path path = validateAndResolve(relativePath, false);
+        Files.deleteIfExists(path);
+    }
+
+    public void rename(String oldPath, String newName) throws IOException {
+        Path source = validateAndResolve(oldPath, false);
+        String sourceFileName = source.getFileName().toString();
+        String extension = sourceFileName.contains(".") ? sourceFileName.substring(sourceFileName.lastIndexOf(".")) : "";
+        String targetName = newName.contains(".") ? newName : newName + extension;
+        Path target = source.resolveSibling(targetName);
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    public void copy(String sourcePath, String targetPath) throws IOException {
+        Path source = validateAndResolve(sourcePath, false);
+        Path targetDir = validateAndResolve(targetPath, true);
+        Path target = targetDir.resolve(source.getFileName());
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    public void move(String sourcePath, String targetPath) throws IOException {
+        Path source = validateAndResolve(sourcePath, false);
+        Path targetDir = validateAndResolve(targetPath, true);
+        Path target = targetDir.resolve(source.getFileName());
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    public void saveFile(MultipartFile file, String relativePath) throws IOException {
+        Path dir = validateAndResolve(relativePath != null ? relativePath : "", true);
+        Path target = dir.resolve(file.getOriginalFilename());
+        try (InputStream in = file.getInputStream()) {
+            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
 }
