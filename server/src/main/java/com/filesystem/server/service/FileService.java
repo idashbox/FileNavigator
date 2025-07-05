@@ -29,41 +29,56 @@ public class FileService {
         }
     }
 
-    public List<FileInfo> listFiles(String relativePath) throws IOException {
-        relativePath = (relativePath == null) ? "" : relativePath.trim();
+    private Path validateAndResolve(String relativePath, boolean mustBeDirectory) throws IOException {
+        if (relativePath == null) relativePath = "";
+        // Удаляем начальные слэши (/, \) для корректной обработки относительных путей
+        relativePath = relativePath.trim().replaceFirst("^[\\\\/]+", "");
 
         // проверяем наличие ".." в пути
         if (relativePath.contains("..")) {
-            throw new IllegalArgumentException("Путь содержит попытку перехода в родительскую директорию '..'");
+            throw new IllegalArgumentException("Parent traversal ('..') is not allowed");
         }
 
-        Path requestedPath = root.resolve(relativePath).normalize();
+        Path resolved = root.resolve(relativePath).normalize();
 
         //  проверяем, что путь находится в пределах корневой директории
-        if (!requestedPath.startsWith(root)) {
-            throw new SecurityException("Попытка доступа к пути за пределами корневой директории");
+        if (!resolved.startsWith(root)) {
+            throw new SecurityException("Attempted access outside root");
         }
 
-        if (!Files.exists(requestedPath)) {
-            throw new IOException("Путь не существует: " + requestedPath);
+        if (!Files.exists(resolved)) {
+            throw new IOException("Path does not exist: " + resolved);
         }
 
-        if (!Files.isDirectory(requestedPath)) {
-            throw new IOException("Указанный путь не является директорией: " + requestedPath);
+        if (mustBeDirectory && !Files.isDirectory(resolved)) {
+            throw new IOException("Expected a directory: " + resolved);
         }
+
+        return resolved;
+    }
+
+    public List<FileInfo> listFiles(String relativePath) throws IOException {
+        Path requestedPath = validateAndResolve(relativePath, true);
 
         try (Stream<Path> paths = Files.list(requestedPath)) {
             return paths.map(this::toFileInfo).collect(Collectors.toList());
         }
     }
 
+    public Path resolveFilePath(String relativePath) throws IOException {
+        return validateAndResolve(relativePath, false);
+    }
+
     private FileInfo toFileInfo(Path path) {
         try {
             BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+            boolean isDirectory = Files.isDirectory(path);
+            long size = isDirectory ? calculateDirectorySize(path) : attrs.size();
+
             return new FileInfo(
                     path.getFileName().toString(),
-                    Files.isDirectory(path) ? "directory" : "file",
-                    attrs.size(),
+                    isDirectory ? "directory" : "file",
+                    size,
                     attrs.creationTime().toString(),
                     attrs.lastModifiedTime().toString()
             );
@@ -72,23 +87,21 @@ public class FileService {
         }
     }
 
-    public Path resolveFilePath(String relativePath) {
-        if (relativePath == null || relativePath.trim().isEmpty()) {
-            return root;
+    private long calculateDirectorySize(Path directory) {
+        try (Stream<Path> files = Files.walk(directory)) {
+            return files
+                    .filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return Files.size(p);
+                        } catch (IOException e) {
+                            return 0L;
+                        }
+                    })
+                    .sum();
+        } catch (IOException e) {
+            return 0L;
         }
-        // Удаляем начальные слэши (/, \) для корректной обработки относительных путей
-        relativePath = relativePath.trim().replaceFirst("^[\\\\/]+", "");
-
-        if (relativePath.contains("..")) {
-            throw new IllegalArgumentException("Нельзя подниматься выше root");
-        }
-
-        Path resolved = root.resolve(relativePath).normalize();
-
-        if (!resolved.startsWith(root)) {
-            throw new SecurityException("Доступ запрещён");
-        }
-
-        return resolved;
     }
+
 }

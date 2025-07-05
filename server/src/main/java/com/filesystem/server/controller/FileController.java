@@ -11,10 +11,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
+    private static final Logger logger = LoggerFactory.getLogger(FileController.class);
     private final FileService fileService;
 
     public FileController(FileService fileService) {
@@ -23,21 +26,21 @@ public class FileController {
 
     @GetMapping
     public List<FileInfo> listFiles(@RequestParam(required = false) String path) throws IOException {
-        System.out.println("Received path parameter: '" + path + "'");
+        logger.info("Received path parameter: '{}'", path);
         return fileService.listFiles(path != null ? path : "");
     }
     @GetMapping("/content")
     public String getFileContent(@RequestParam String path) throws IOException {
-        System.out.println("Requested file path: '" + path + "'");
+        logger.info("Received file path: '{}'", path);
         Path filePath = fileService.resolveFilePath(path);
 
-        System.out.println("Resolved file path: '" + filePath + "'");
+        logger.debug("Resolved file path: '{}'", filePath);
         if (!Files.exists(filePath)) {
-            throw new IOException("Файл не найден: " + filePath);
+            throw new IOException("File not found: " + filePath);
         }
 
         if (Files.isDirectory(filePath)) {
-            throw new IOException("Указанный путь является директорией: " + filePath);
+            throw new IOException("Path points to a directory, not a file: " + filePath);
         }
 
         return new String(Files.readAllBytes(filePath));
