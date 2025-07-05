@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import Modal from 'react-modal';
 import { FileItem } from '../api/fileApi';
 import { getFileContent } from '../api/fileApi';
+import { formatDate } from '../utils/formatDate';
+import { formatSize } from '../utils/formatSize';
 
 interface Props {
     file: FileItem | null;
@@ -23,9 +25,9 @@ const FileModal: React.FC<Props> = ({ file, onClose, path }) => {
     return (
         <Modal isOpen={!!file} onRequestClose={onClose} contentLabel="File Info">
             <h2>{file.name}</h2>
-            <p><strong>Размер:</strong> {file.size} байт</p>
-            <p><strong>Создан:</strong> {file.created}</p>
-            <p><strong>Изменён:</strong> {file.modified}</p>
+            <p><strong>Размер:</strong> {formatSize(file.size)} байт</p>
+            <p><strong>Создан:</strong> {file.created ? formatDate(file.created) : '-'}</p>
+            <p><strong>Изменён:</strong> {formatDate(file.modified)}</p>
             <p><strong>Тип:</strong> {file.type}</p>
             {file.type === 'file' && (
                 <>

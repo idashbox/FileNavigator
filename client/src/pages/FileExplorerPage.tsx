@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getFiles, FileItem } from '../api/fileApi';
 import FileList from '../components/FileList';
 import FileModal from '../components/FileModal';
+import ErrorView from '../components/ErrorView';
 
 const FileExplorerPage: React.FC = () => {
     const [files, setFiles] = useState<FileItem[]>([]);
@@ -63,13 +64,14 @@ const FileExplorerPage: React.FC = () => {
     };
 
     if (loading) return <div className="loading">Loading files...</div>;
-    if (error) return (
-        <div className="error">
-            <h3>Error</h3>
-            <p>{error}</p>
-            <button onClick={() => window.location.reload()}>Retry</button>
-        </div>
-    );
+    if (error) {
+        return (
+            <ErrorView
+                message={error}
+                onBack={() => navigate('/')}
+            />
+        );
+    }
 
     return (
         <div className="file-explorer">

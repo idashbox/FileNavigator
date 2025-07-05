@@ -1,6 +1,8 @@
 import React from 'react';
 import { FileItem } from '../api/fileApi';
 import './FileList.css';
+import { formatDate } from '../utils/formatDate';
+import { formatSize } from '../utils/formatSize';
 
 interface FileListProps {
     files: FileItem[];
@@ -26,9 +28,9 @@ const FileList: React.FC<FileListProps> = ({ files, onClick, view }) => {
                     <tr key={file.name} onClick={() => onClick(file)}>
                         <td>{file.type === 'directory' ? '📁' : '📄'}</td>
                         <td>{file.name}</td>
-                        <td>{file.size}</td>
-                        <td>{file.created}</td>
-                        <td>{file.modified}</td>
+                        <td>{formatSize(file.size)}</td>
+                        <td> {file.created ? formatDate(file.created) : '-'}</td>
+                        <td> {formatDate(file.modified)}</td>
                     </tr>
                 ))}
                 </tbody>

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { mapErrorMessage } from '../utils/mapError';
 
 export interface FileItem {
     name: string;
@@ -18,28 +19,26 @@ const apiClient = axios.create({
 
 export const getFiles = async (path: string): Promise<FileItem[]> => {
     try {
-        const sanitizedPath = path
-            .replace(/^\/+|\/+$/g, '')
-            .replace(/\.\./g, '');
-        console.log('Sending path to backend:', sanitizedPath);
         const response = await apiClient.get<FileItem[]>('/api/files', {
-            params: {
-                path: sanitizedPath || ''
-            },
+            params: { path }
         });
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error)) {
-            const message = error.response?.data?.message || error.message || 'Request failed';
-            console.error('API Error:', error.response?.data || error.message);
-            throw new Error(message);
+            const status = error.response?.status;
+            const mappedMessage = mapErrorMessage(status, error.message);
+            throw new Error(mappedMessage);
         }
-        console.error('Unexpected error:', error);
-        throw new Error('An unexpected error occurred');
+        throw new Error('Неизвестная ошибка клиента');
     }
 };
 
+
 export const getFileContent = async (path: string): Promise<string | null> => {
-    const response = await apiClient.get('/api/files/content', { params: { path } });
-    return response.data;
+    try {
+        const response = await apiClient.get('/api/files/content', { params: { path } });
+        return response.data;
+    } catch (error) {
+        throw new Error('Ошибка загрузки содержимого файла');
+    }
 };
