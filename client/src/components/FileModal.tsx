@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import Modal from 'react-modal';
-import { FileItem, deleteFile, renameFile, copyFile, moveFile } from '../api/fileApi';
+import { FileItem, deleteFile, renameFile, copyFile, moveFile, forceAction } from '../api/fileApi';
 import { getFileContent } from '../api/fileApi';
 import { formatDate } from '../utils/formatDate';
 import { formatSize } from '../utils/formatSize';
-import { mapApiErrorToRussian, translateError } from '../utils/errorTranslations';
+import { translateError } from '../utils/errorTranslations';
+import ConfirmModal from './ConfirmModal';
 
 interface Props {
     file: FileItem | null;
@@ -20,67 +21,107 @@ const FileModal: React.FC<Props> = ({ file, onClose, path, onActionSuccess }) =>
     const [actionType, setActionType] = useState<'copy' | 'move' | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
+    const [loadingContent, setLoadingContent] = useState(false);
+
+    const loadFileContent = async () => {
+        if (!file || file.type !== 'file') return;
+
+        setLoadingContent(true);
+        try {
+            const filePath = path ? `${path}/${file.name}` : file.name;
+            const content = await getFileContent(filePath);
+            setContent(content);
+        } catch (err) {
+            const errorMessage = translateError(err);
+            if (err instanceof Error && err.cause) {
+                const status = (err.cause as any).status;
+                if (status === 403) {
+                    setContent('Доступ запрещён: недостаточно прав для просмотра файла');
+                } else if (status === 400 && errorMessage.includes('Unsupported file type')) {
+                    setContent('Формат файла не поддерживается для просмотра');
+                } else {
+                    setContent(`Ошибка: ${errorMessage}`);
+                }
+            } else {
+                setContent(`Ошибка: ${errorMessage}`);
+            }
+        } finally {
+            setLoadingContent(false);
+        }
+    };
 
     useEffect(() => {
-        if (file && file.type === 'file') {
-            const filePath = path ? `${path}/${file.name}` : file.name;
-            getFileContent(filePath)
-                .then(setContent)
-                .catch(() => setContent('Ошибка чтения'));
-            setNewName(file.name);
-        }
+        loadFileContent();
+        if (file) setNewName(file.name);
     }, [file, path]);
 
-    const handleDelete = async () => {
-        if (!file) return;
+    const handleOperation = async (
+        action: () => Promise<void>,
+        successMessage: string,
+        shouldClose: boolean = false
+    ) => {
         try {
             setError(null);
             setSuccess(null);
-            const filePath = path ? `${path}/${file.name}` : file.name;
-            await deleteFile(filePath);
-            setSuccess('Файл успешно удалён');
+            await action();
+            setSuccess(successMessage);
             onActionSuccess();
-            setTimeout(onClose, 1000);
+            if (shouldClose) {
+                setTimeout(onClose, 1000);
+            }
         } catch (err) {
-            setError(mapApiErrorToRussian(err instanceof Error ? err.message : 'Ошибка удаления'));
+            if (err instanceof Error && err.cause && (err.cause as any).status === 409) {
+                setShowConfirmModal(true);
+                setConfirmAction(() => async () => {
+                    try {
+                        await action();
+                        setSuccess(successMessage);
+                        onActionSuccess();
+                        if (shouldClose) {
+                            setTimeout(onClose, 1000);
+                        }
+                        setShowConfirmModal(false);
+                    } catch (forceErr) {
+                        setError(translateError(forceErr));
+                        setShowConfirmModal(false);
+                    }
+                });
+            } else {
+                setError(translateError(err));
+            }
         }
+    };
+
+    const handleDelete = async () => {
+        if (!file) return;
+        const filePath = path ? `${path}/${file.name}` : file.name;
+        await handleOperation(
+            () => deleteFile(filePath),
+            'Файл успешно удалён',
+            true
+        );
     };
 
     const handleRename = async () => {
         if (!file || !newName) return;
-        try {
-            setError(null);
-            setSuccess(null);
-            const oldPath = path ? `${path}/${file.name}` : file.name;
-            await renameFile(oldPath, newName);
-            setSuccess('Файл успешно переименован');
-            setNewName('');
-            onActionSuccess();
-            setTimeout(onClose, 1000);
-        } catch (err) {
-            setError(mapApiErrorToRussian(err instanceof Error ? err.message : 'Ошибка переименования'));
-        }
+        const oldPath = path ? `${path}/${file.name}` : file.name;
+        await handleOperation(
+            () => renameFile(oldPath, newName),
+            'Файл успешно переименован',
+            true
+        );
     };
 
     const handleCopyMove = async () => {
         if (!file || !targetPath || !actionType) return;
-        try {
-            setError(null);
-            setSuccess(null);
-            const sourcePath = path ? `${path}/${file.name}` : file.name;
-            const action = actionType === 'copy' ? copyFile : moveFile;
-            await action(sourcePath, targetPath);
-            setSuccess(`Файл успешно ${actionType === 'copy' ? 'скопирован' : 'перемещён'} в ${targetPath}`);
-            setTargetPath('');
-            setActionType(null);
-            onActionSuccess();
-            if (actionType === 'move') {
-                setTimeout(onClose, 1000);
-            }
-        } catch (err) {
-            const actionName = actionType === 'copy' ? 'копирования' : 'перемещения';
-            setError(mapApiErrorToRussian(err instanceof Error ? err.message : `Ошибка ${actionName}`));
-        }
+        const sourcePath = path ? `${path}/${file.name}` : file.name;
+        await handleOperation(
+            () => (actionType === 'copy' ? copyFile : moveFile)(sourcePath, targetPath),
+            `Файл успешно ${actionType === 'copy' ? 'скопирован' : 'перемещён'} в ${targetPath}`,
+            actionType === 'move'
+        );
     };
 
     const handleCancelAction = () => {
@@ -88,6 +129,7 @@ const FileModal: React.FC<Props> = ({ file, onClose, path, onActionSuccess }) =>
         setActionType(null);
         setError(null);
         setSuccess(null);
+        setShowConfirmModal(false);
     };
 
     const isValidTargetPath = () => {
@@ -97,69 +139,83 @@ const FileModal: React.FC<Props> = ({ file, onClose, path, onActionSuccess }) =>
     if (!file) return null;
 
     return (
-        <Modal isOpen={!!file} onRequestClose={onClose} contentLabel="File Info">
-            <h2>{file.name}</h2>
-            <p><strong>Размер:</strong> {formatSize(file.size)} байт</p>
-            <p><strong>Создан:</strong> {file.created ? formatDate(file.created) : '-'}</p>
-            <p><strong>Изменён:</strong> {formatDate(file.modified)}</p>
-            <p><strong>Тип:</strong> {file.type}</p>
+        <>
+            <Modal isOpen={!!file} onRequestClose={onClose} contentLabel="File Info">
+                <h2>{file.name}</h2>
+                <p><strong>Размер:</strong> {formatSize(file.size)}</p>
+                <p><strong>Создан:</strong> {file.created ? formatDate(file.created) : '-'}</p>
+                <p><strong>Изменён:</strong> {formatDate(file.modified)}</p>
+                <p><strong>Тип:</strong> {file.type === 'file' ? 'Файл' : 'Директория'}</p>
 
-            {file.type === 'file' && (
-                <>
-                    <h3>Содержимое:</h3>
-                    <pre>{content ?? 'Невозможно отобразить содержимое файла'}</pre>
-                </>
-            )}
-
-            <div className="file-actions">
-                <h3>Переименовать</h3>
-                <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Новое имя"
-                />
-                <button onClick={handleRename} disabled={!newName}>
-                    Переименовать
-                </button>
-
-                <h3>Копировать/Переместить</h3>
-                <input
-                    type="text"
-                    value={targetPath}
-                    onChange={(e) => setTargetPath(e.target.value)}
-                    placeholder="Путь назначения (например, folder/subfolder)"
-                />
-                <button onClick={() => setActionType('copy')}>
-                    Копировать
-                </button>
-                <button onClick={() => setActionType('move')}>
-                    Переместить
-                </button>
-                {actionType && (
+                {file.type === 'file' && (
                     <>
-                        <button
-                            onClick={handleCopyMove}
-                            disabled={!isValidTargetPath()}
-                        >
-                            Подтвердить {actionType === 'copy' ? 'копирование' : 'перемещение'}
-                        </button>
-                        <button onClick={handleCancelAction}>
-                            Отмена
-                        </button>
+                        <h3>Содержимое:</h3>
+                        <div className="file-content">
+                            {loadingContent ? (
+                                <p>Загрузка...</p>
+                            ) : (
+                                <pre>{content}</pre>
+                            )}
+                        </div>
                     </>
                 )}
 
-                <h3>Удалить</h3>
-                <button onClick={handleDelete}>
-                    Удалить
-                </button>
+                <div className="file-actions">
+                    <h3>Переименовать</h3>
+                    <input
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="Новое имя"
+                    />
+                    <button onClick={handleRename} disabled={!newName}>
+                        Переименовать
+                    </button>
 
-                <button onClick={onClose}>Закрыть</button>
-            </div>
-            {error && <p className="error">{error}</p>}
-            {success && <p className="success">{success}</p>}
-        </Modal>
+                    <h3>Копировать/Переместить</h3>
+                    <input
+                        type="text"
+                        value={targetPath}
+                        onChange={(e) => setTargetPath(e.target.value)}
+                        placeholder="Путь назначения (например, folder/subfolder)"
+                    />
+                    <button onClick={() => setActionType('copy')}>
+                        Копировать
+                    </button>
+                    <button onClick={() => setActionType('move')}>
+                        Переместить
+                    </button>
+                    {actionType && (
+                        <>
+                            <button
+                                onClick={handleCopyMove}
+                                disabled={!isValidTargetPath()}
+                            >
+                                Подтвердить {actionType === 'copy' ? 'копирование' : 'перемещение'}
+                            </button>
+                            <button onClick={handleCancelAction}>
+                                Отмена
+                            </button>
+                        </>
+                    )}
+
+                    <h3>Удалить</h3>
+                    <button onClick={handleDelete}>
+                        Удалить
+                    </button>
+
+                    <button onClick={onClose}>Закрыть</button>
+                </div>
+                {error && <p className="error">{error}</p>}
+                {success && <p className="success">{success}</p>}
+            </Modal>
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                message={`Файл уже существует. Перезаписать?`}
+                onConfirm={confirmAction}
+                onCancel={handleCancelAction}
+            />
+        </>
     );
 };
 

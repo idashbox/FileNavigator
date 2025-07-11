@@ -11,61 +11,62 @@ export interface FileItem {
 
 const apiClient = axios.create({
     baseURL: 'http://localhost:8080',
-    timeout: 10000,
+    timeout: 30000,
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-export const getFiles = async (path: string): Promise<FileItem[]> => {
+export const getFiles = async (path: string, offset?: number, limit?: number): Promise<FileItem[]> => {
     try {
         const response = await apiClient.get<FileItem[]>('/api/files', {
-            params: { path: path },
+            params: { path, offset, limit },
         });
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            const message = status === 404 ? 'Directory not found' : mapErrorMessage(status, error.message);
-            throw new Error(message);
+            const message = error.response?.data?.message ||
+                (status === 404 ? 'Directory not found' :
+                    status === 403 ? 'Access denied: Cannot read directory' :
+                        mapErrorMessage(status, error.message));
+            throw new Error(message, { cause: { status } });
         }
-        throw new Error('Client error');
+        throw new Error('Failed to load files');
     }
 };
 
 export const getFileContent = async (path: string): Promise<string | null> => {
     try {
         const response = await apiClient.get('/api/files/content', {
-            params: { path: path },
+            params: { path },
             responseType: 'text',
         });
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            if (status === 404) {
-                throw new Error('File not found');
-            } else if (status === 415) {
-                throw new Error('Unsupported file type for preview');
-            }
-            throw new Error(`File content loading error: ${error.message}`);
+            const message = error.response?.data?.message ||
+                (status === 404 ? 'File not found' :
+                    status === 403 ? 'Access denied: Cannot read file' :
+                        status === 400 ? 'Unsupported file type for preview' :
+                            `Failed to load file content: ${error.message}`);
+            throw new Error(message, { cause: { status } });
         }
-        throw new Error('Client error');
+        throw new Error('Failed to load file content');
     }
 };
 
 export const deleteFile = async (path: string): Promise<void> => {
     try {
         await apiClient.delete('/api/files', {
-            params: { path: path },
+            params: { path },
         });
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            if (status === 404) {
-                throw new Error('File or directory not found');
-            }
-            throw new Error(`File deletion error: ${error.message}`);
+            const message = error.response?.data?.message || (status === 404 ? 'File or directory not found' : `File deletion error: ${error.message}`);
+            throw new Error(message);
         }
         throw new Error('Client error');
     }
@@ -74,15 +75,13 @@ export const deleteFile = async (path: string): Promise<void> => {
 export const renameFile = async (oldPath: string, newName: string): Promise<void> => {
     try {
         await apiClient.put('/api/files/rename', null, {
-            params: { oldPath: oldPath, newName },
+            params: { oldPath, newName },
         });
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            if (status === 404) {
-                throw new Error('File or directory not found');
-            }
-            throw new Error(`File rename error: ${error.message}`);
+            const message = error.response?.data?.message || (status === 404 ? 'File or directory not found' : status === 409 ? 'File already exists' : `File rename error: ${error.message}`);
+            throw new Error(message, { cause: { status } });
         }
         throw new Error('Client error');
     }
@@ -91,15 +90,13 @@ export const renameFile = async (oldPath: string, newName: string): Promise<void
 export const copyFile = async (sourcePath: string, targetPath: string): Promise<void> => {
     try {
         await apiClient.post('/api/files/copy', null, {
-            params: { sourcePath: sourcePath, targetPath: targetPath },
+            params: { sourcePath, targetPath },
         });
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            if (status === 404) {
-                throw new Error('Source or target path not found');
-            }
-            throw new Error(`File copy error: ${error.message}`);
+            const message = error.response?.data?.message || (status === 404 ? 'Source or target path not found' : status === 409 ? 'File already exists' : `File copy error: ${error.message}`);
+            throw new Error(message, { cause: { status } });
         }
         throw new Error('Client error');
     }
@@ -108,15 +105,13 @@ export const copyFile = async (sourcePath: string, targetPath: string): Promise<
 export const moveFile = async (sourcePath: string, targetPath: string): Promise<void> => {
     try {
         await apiClient.post('/api/files/move', null, {
-            params: { sourcePath: sourcePath, targetPath: targetPath },
+            params: { sourcePath, targetPath },
         });
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            if (status === 404) {
-                throw new Error('Source or target path not found');
-            }
-            throw new Error(`File move error: ${error.message}`);
+            const message = error.response?.data?.message || (status === 404 ? 'Source or target path not found' : status === 409 ? 'File already exists' : `File move error: ${error.message}`);
+            throw new Error(message, { cause: { status } });
         }
         throw new Error('Client error');
     }
@@ -127,7 +122,6 @@ export const uploadFile = async (file: File, path: string): Promise<void> => {
         const formData = new FormData();
         formData.append('file', file);
         if (path) formData.append('path', path);
-
         await apiClient.post('/api/files/upload', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
@@ -136,10 +130,31 @@ export const uploadFile = async (file: File, path: string): Promise<void> => {
     } catch (error) {
         if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            if (status === 404) {
-                throw new Error('Target directory not found');
-            }
-            throw new Error(`File upload error: ${error.message}`);
+            const message = error.response?.data?.message || (status === 404 ? 'Target directory not found' : status === 409 ? 'File already exists' : `File upload error: ${error.message}`);
+            throw new Error(message, { cause: { status } });
+        }
+        throw new Error('Client error');
+    }
+};
+
+export const forceAction = async (action: 'rename' | 'copy' | 'move' | 'upload', sourcePath: string | null, targetPath: string | null, newName: string | null, file: File | null): Promise<void> => {
+    try {
+        const formData = new FormData();
+        formData.append('action', action);
+        if (sourcePath) formData.append('sourcePath', sourcePath);
+        if (targetPath) formData.append('targetPath', targetPath);
+        if (newName) formData.append('newName', newName);
+        if (file) formData.append('file', file);
+        await apiClient.post('/api/files/force', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    } catch (error) {
+        if (axios.isAxiosError(error)) {
+            const status = error.response?.status;
+            const message = error.response?.data?.message || (status === 404 ? 'Source or target path not found' : status === 400 ? 'Invalid action parameters' : `Forced action error: ${error.message}`);
+            throw new Error(message, { cause: { status } });
         }
         throw new Error('Client error');
     }
