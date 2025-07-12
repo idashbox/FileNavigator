@@ -12,6 +12,10 @@ java {
     targetCompatibility = JavaVersion.VERSION_19
 }
 
+tasks.named('bootJar') {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 repositories {
     mavenCentral()
 }
